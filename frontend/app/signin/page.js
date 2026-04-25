@@ -20,7 +20,7 @@ export default function Signin() {
       const res = await axios.post(
         "http://localhost:1337/api/auth/local",
         {
-          identifier: form.email, // ✅ IMPORTANT
+          identifier: form.email, 
           password: form.password,
         }
       );
@@ -30,7 +30,7 @@ export default function Signin() {
       // Use context to login
       login(res.data.jwt, res.data.user);
 
-      router.push("/dashboard");
+      router.push("/");
     } catch (err) {
       const message = err.response?.data?.error?.message || "Login failed";
       setError(message);

@@ -1,65 +1,236 @@
-import Image from "next/image";
+"use client";
 
-export default function Home() {
+import axios from "axios";
+import { useCallback, useEffect, useState, memo } from "react";
+import { useRouter } from "next/navigation";
+import { useAuth } from "../context/AuthContext";
+
+const TodoItem = memo(({ todo, onToggle, onDelete }) => (
+  <li
+    className={`flex justify-between items-center p-4 border rounded-lg ${
+      todo.isCompleted ? "bg-green-900 border-green-700" : "bg-orange-900 border-orange-700"
+    }`}
+  >
+    <span
+      onClick={() => onToggle(todo)}
+      className={`cursor-pointer flex-1 text-lg font-semibold ${
+        todo.isCompleted ? "line-through text-green-400" : "text-orange-400"
+      }`}
+    >
+      {todo.title}
+    </span>
+    <button
+      onClick={() => onDelete(todo)}
+      className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors"
+    >
+      Delete
+    </button>
+  </li>
+));
+
+const Home = memo(function Home() {
+  const [todos, setTodos] = useState([]);
+  const [title, setTitle] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const router = useRouter();
+  const { token, logout, isAuthenticated, isLoading } = useAuth();
+
+  // 🔄 FETCH TODOS
+  const fetchTodos = useCallback(async () => {
+    if (!token) return;
+
+    try {
+      setLoading(true);
+      setError("");
+
+      const res = await axios.get(
+        "http://localhost:1337/api/todos",
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      setTodos(res.data.data || []);
+    } catch (err) {
+      const message = err.response?.data?.error?.message || "Failed to fetch todos";
+      setError(message);
+      console.log("FETCH ERROR:", err.response?.data);
+    } finally {
+      setLoading(false);
+    }
+  }, [token]);
+
+  // ➕ ADD TODO
+  const addTodo = useCallback(async () => {
+    if (!title.trim() || !token) return;
+
+    const newTodo = { title, isCompleted: false };
+    setTodos(prev => [...prev, { ...newTodo, documentId: Date.now().toString() }]); // optimistic
+    setTitle("");
+
+    try {
+      setError("");
+      const res = await axios.post(
+        "http://localhost:1337/api/todos",
+        {
+          data: newTodo,
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      // Update with real data
+      setTodos(prev => prev.map(todo =>
+        todo.documentId === newTodo.documentId ? res.data.data : todo
+      ));
+    } catch (err) {
+      const message = err.response?.data?.error?.message || "Failed to add todo";
+      setError(message);
+      console.log("CREATE ERROR:", err.response?.data);
+      // Revert optimistic update
+      setTodos(prev => prev.filter(todo => todo.documentId !== newTodo.documentId));
+      setTitle(title); // restore title
+    }
+  }, [title, token]);
+
+  // 🔁 TOGGLE TODO
+  const toggleTodo = useCallback(async (todo) => {
+    if (!token) return;
+
+    const original = todo.isCompleted;
+    setTodos(prev => prev.map(t =>
+      t.documentId === todo.documentId ? { ...t, isCompleted: !t.isCompleted } : t
+    ));
+
+    try {
+      setError("");
+      await axios.put(
+        `http://localhost:1337/api/todos/${todo.documentId}`,
+        {
+          data: {
+            isCompleted: !original,
+          },
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+    } catch (err) {
+      const message = err.response?.data?.error?.message || "Failed to update todo";
+      setError(message);
+      console.log("UPDATE ERROR:", err.response?.data);
+      // Revert
+      setTodos(prev => prev.map(t =>
+        t.documentId === todo.documentId ? { ...t, isCompleted: original } : t
+      ));
+    }
+  }, [token]);
+
+  // ❌ DELETE TODO
+  const deleteTodo = useCallback(async (todo) => {
+    if (!token) return;
+
+    const original = todo;
+    setTodos(prev => prev.filter(t => t.documentId !== todo.documentId));
+
+    try {
+      setError("");
+      await axios.delete(
+        `http://localhost:1337/api/todos/${todo.documentId}`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+    } catch (err) {
+      const message = err.response?.data?.error?.message || "Failed to delete todo";
+      setError(message);
+      console.log("DELETE ERROR:", err.response?.data);
+      // Revert
+      setTodos(prev => [...prev, original]);
+    }
+  }, [token]);
+
+  // Redirect if not authenticated
+  useEffect(() => {
+    if (!isLoading && !isAuthenticated) {
+      router.push("/signin");
+    }
+  }, [isAuthenticated, isLoading, router]);
+
+  // 🔄 LOAD TODOS
+  useEffect(() => {
+    if (token) fetchTodos();
+  }, [token, fetchTodos]);
+
+  if (isLoading) return <p>Loading...</p>;
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.js file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+    <div className="min-h-screen bg-gray-900 flex items-center justify-center p-4">
+      <div className="max-w-lg w-full bg-gray-800 rounded-xl shadow-2xl p-6">
+        <h1 className="text-2xl font-bold text-white mb-6 text-center">Dashboard</h1>
+
+        {error && <p className="text-red-400 mb-4 bg-red-900 p-3 rounded-lg">{error}</p>}
+
+        {/* ➕ ADD TODO */}
+        <div className="flex mb-5">
+          <input
+            type="text"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="Enter todo..."
+            className="flex-1 p-3 bg-gray-700 text-white rounded-l-lg border border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            onKeyDown={(e) => e.key === "Enter" && addTodo()}
+          />
+          <button
+            onClick={addTodo}
+            className="bg-blue-600 text-white px-6 rounded-r-lg hover:bg-blue-700 transition-colors"
           >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+            Add
+          </button>
         </div>
-      </main>
+
+        {/* ⏳ LOADING */}
+        {loading && <p className="text-blue-400 animate-pulse text-center">Loading...</p>}
+
+        {/* 📋 TODO LIST */}
+        {!loading && todos.length === 0 && (
+          <p className="text-gray-400 bg-gray-700 p-4 rounded-lg text-center">No tasks yet 🚀</p>
+        )}
+
+        <ul className="space-y-3">
+          {todos.map((todo) => (
+            <TodoItem key={todo.documentId} todo={todo} onToggle={toggleTodo} onDelete={deleteTodo} />
+          ))}
+        </ul>
+
+        {/* 🔓 LOGOUT */}
+        <div className="mt-8">
+          <button
+            onClick={() => {
+              if (confirm("Logout?")) {
+                logout();
+                router.push("/signin");
+              }
+            }}
+            className="w-full bg-gray-600 text-white p-3 rounded-lg hover:bg-gray-700 transition-colors"
+          >
+            Logout
+          </button>
+        </div>
+      </div>
     </div>
   );
-}
+});
+
+export default Home;

@@ -8,6 +8,7 @@ const AuthContext = createContext();
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [token, setToken] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     // Load from cookies on mount
@@ -24,6 +25,7 @@ export function AuthProvider({ children }) {
         console.error("Failed to parse user from cookie");
       }
     }
+    setIsLoading(false);
   }, []);
 
   const login = (jwt, userData) => {
@@ -43,7 +45,7 @@ export function AuthProvider({ children }) {
   const isAuthenticated = !!token;
 
   return (
-    <AuthContext.Provider value={{ user, token, login, logout, isAuthenticated }}>
+    <AuthContext.Provider value={{ user, token, login, logout, isAuthenticated, isLoading }}>
       {children}
     </AuthContext.Provider>
   );
